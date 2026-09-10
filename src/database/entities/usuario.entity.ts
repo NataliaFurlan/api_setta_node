@@ -10,6 +10,7 @@ export class Usuario {
   @Column({ length: 150 }) nome!: string;
   @Column({ length: 180, unique: true }) email!: string;
   @Column({ name: 'senha_hash', select: false }) senhaHash!: string;
+  @Column({ length: 30, nullable: true }) telefone!: string | null;
   @Column({ name: 'tipo_usuario', type: 'enum', enum: TipoUsuario })
   tipoUsuario!: TipoUsuario;
   @Column({ type: 'boolean', default: true }) ativo!: boolean;

@@ -1,12 +1,18 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Aluno } from '../database/entities/aluno.entity';
 import { Treinador } from '../database/entities/treinador.entity';
 import { TipoUsuario, Usuario } from '../database/entities/usuario.entity';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { LoginDto } from './dto/login.dto';
+import { CadastroTreinadorDto } from './dto/cadastro-treinador.dto';
+import { CadastroTreinadorResponseDto } from './dto/cadastro-treinador-response.dto';
 import { PasswordService } from './password.service';
 @Injectable()
 export class AuthService {
@@ -17,7 +23,44 @@ export class AuthService {
     @InjectRepository(Aluno) private readonly alunos: Repository<Aluno>,
     private readonly passwords: PasswordService,
     private readonly jwt: JwtService,
+    private readonly dataSource: DataSource,
   ) {}
+
+  async cadastrarTreinador(
+    dto: CadastroTreinadorDto,
+  ): Promise<CadastroTreinadorResponseDto> {
+    const existente = await this.usuarios
+      .createQueryBuilder('usuario')
+      .where('LOWER(usuario.email) = :email', { email: dto.email })
+      .getExists();
+    if (existente) throw new ConflictException('E-mail já cadastrado');
+
+    await this.dataSource.transaction(async (manager) => {
+      const usuario = await manager.save(
+        manager.create(Usuario, {
+          nome: dto.nome.trim(),
+          email: dto.email,
+          senhaHash: await this.passwords.encode(dto.senha),
+          telefone: dto.telefone?.trim() || null,
+          tipoUsuario: TipoUsuario.TREINADOR,
+          ativo: false,
+        }),
+      );
+      await manager.save(
+        manager.create(Treinador, {
+          idUsuario: usuario.idUsuario,
+          nomeProfissional: dto.nomeProfissional?.trim() || null,
+          cref: dto.cref?.trim() || null,
+          bio: dto.bio?.trim() || null,
+          ativo: false,
+        }),
+      );
+    });
+    return {
+      status: 'PENDENTE_APROVACAO',
+      mensagem: 'Cadastro enviado para análise.',
+    };
+  }
   async login(dto: LoginDto): Promise<LoginResponseDto> {
     const usuario = await this.usuarios
       .createQueryBuilder('usuario')
