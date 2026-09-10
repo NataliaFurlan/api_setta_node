@@ -1,5 +1,12 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 export enum TipoUsuario {
+  ADMIN = 'ADMIN',
   TREINADOR = 'TREINADOR',
   ALUNO = 'ALUNO',
 }
@@ -15,4 +22,9 @@ export class Usuario {
   @Column({ name: 'tipo_usuario', type: 'enum', enum: TipoUsuario })
   tipoUsuario!: TipoUsuario;
   @Column({ type: 'boolean', default: true }) ativo!: boolean;
+  @Column({ name: 'versao_sessao', type: 'int', default: 0 })
+  versaoSessao!: number;
+  @CreateDateColumn({ name: 'criado_em', type: 'datetime' }) criadoEm!: Date;
+  @UpdateDateColumn({ name: 'atualizado_em', type: 'datetime' })
+  atualizadoEm!: Date;
 }

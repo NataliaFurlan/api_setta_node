@@ -10,6 +10,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PasswordService } from './password.service';
+import { RolesGuard } from './roles.guard';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Usuario, Treinador, Aluno]),
@@ -23,7 +24,7 @@ import { PasswordService } from './password.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, PasswordService, JwtStrategy],
-  exports: [JwtModule, PasswordService],
+  providers: [AuthService, PasswordService, JwtStrategy, RolesGuard],
+  exports: [JwtModule, PasswordService, RolesGuard],
 })
 export class AuthModule {}

@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -7,7 +8,10 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Aluno } from '../database/entities/aluno.entity';
-import { Treinador } from '../database/entities/treinador.entity';
+import {
+  StatusTreinador,
+  Treinador,
+} from '../database/entities/treinador.entity';
 import { TipoUsuario, Usuario } from '../database/entities/usuario.entity';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { LoginDto } from './dto/login.dto';
@@ -44,6 +48,7 @@ export class AuthService {
           telefone: dto.telefone?.trim() || null,
           tipoUsuario: TipoUsuario.TREINADOR,
           ativo: false,
+          status: StatusTreinador.PENDENTE,
         }),
       );
       await manager.save(
@@ -69,10 +74,10 @@ export class AuthService {
       .getOne();
     if (
       !usuario ||
-      !usuario.ativo ||
       !(await this.passwords.matches(dto.senha, usuario.senhaHash))
     )
       throw new UnauthorizedException('Login ou senha inválidos');
+    if (!usuario.ativo) await this.throwInactiveAccount(usuario);
     if (this.passwords.needsUpgrade(usuario.senhaHash))
       await this.usuarios.update(usuario.idUsuario, {
         senhaHash: await this.passwords.encode(dto.senha),
@@ -82,6 +87,7 @@ export class AuthService {
       sub: usuario.email,
       idUsuario: usuario.idUsuario,
       tipoUsuario: usuario.tipoUsuario,
+      versaoSessao: usuario.versaoSessao,
     });
     return {
       token,
@@ -92,6 +98,7 @@ export class AuthService {
     };
   }
   private async findProfileId(usuario: Usuario) {
+    if (usuario.tipoUsuario === TipoUsuario.ADMIN) return usuario.idUsuario;
     if (usuario.tipoUsuario === TipoUsuario.TREINADOR) {
       const perfil = await this.treinadores.findOneBy({
         idUsuario: usuario.idUsuario,
@@ -104,5 +111,36 @@ export class AuthService {
       if (perfil) return perfil.idAluno;
     }
     throw new UnauthorizedException('Perfil de usuário inválido');
+  }
+
+  private async throwInactiveAccount(usuario: Usuario): Promise<never> {
+    if (usuario.tipoUsuario === TipoUsuario.TREINADOR) {
+      const treinador = await this.treinadores.findOneBy({
+        idUsuario: usuario.idUsuario,
+      });
+      if (treinador?.status === StatusTreinador.PENDENTE)
+        throw new ForbiddenException({
+          code: 'ACCOUNT_PENDING',
+          message:
+            'Seu cadastro está em análise. A equipe tem até 2 dias úteis para confirmar o cadastro.',
+          estimatedReviewBusinessDays: 2,
+        });
+      if (treinador?.status === StatusTreinador.REPROVADO)
+        throw new ForbiddenException({
+          code: 'ACCOUNT_REJECTED',
+          message: 'Seu cadastro não foi aprovado.',
+          reason: treinador.justificativaAnalise,
+        });
+      if (treinador?.status === StatusTreinador.SUSPENSO)
+        throw new ForbiddenException({
+          code: 'ACCOUNT_SUSPENDED',
+          message: 'Seu acesso está suspenso. Entre em contato com o suporte.',
+          reason: treinador.justificativaAnalise,
+        });
+    }
+    throw new ForbiddenException({
+      code: 'ACCOUNT_INACTIVE',
+      message: 'Conta inativa.',
+    });
   }
 }

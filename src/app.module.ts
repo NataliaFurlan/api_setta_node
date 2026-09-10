@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { validateEnvironment } from './config/environment';
 import { HealthController } from './health/health.controller';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { HealthController } from './health/health.controller';
       }),
     }),
     AuthModule,
+    AdminModule,
   ],
   controllers: [HealthController],
 })

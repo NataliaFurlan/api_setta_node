@@ -5,7 +5,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Repository } from 'typeorm';
 import { TipoUsuario, Usuario } from '../database/entities/usuario.entity';
-type JwtPayload = { sub: string; idUsuario: string; tipoUsuario: TipoUsuario };
+export type JwtPayload = {
+  sub: string;
+  idUsuario: string;
+  tipoUsuario: TipoUsuario;
+  versaoSessao: number;
+};
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -24,6 +29,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
     if (
       !usuario?.ativo ||
+      usuario.versaoSessao !== payload.versaoSessao ||
       usuario.email.toLowerCase() !== payload.sub.toLowerCase()
     )
       throw new UnauthorizedException();
