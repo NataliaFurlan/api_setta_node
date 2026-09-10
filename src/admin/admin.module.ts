@@ -5,6 +5,7 @@ import { LogAdministrativo } from '../database/entities/log-administrativo.entit
 import { Treinador } from '../database/entities/treinador.entity';
 import { Usuario } from '../database/entities/usuario.entity';
 import { AdminController } from './admin.controller';
+import { AdminBootstrapService } from './admin-bootstrap.service';
 import { AdminService } from './admin.service';
 
 @Module({
@@ -13,6 +14,6 @@ import { AdminService } from './admin.service';
     AuthModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService],
+  providers: [AdminService, AdminBootstrapService],
 })
 export class AdminModule {}
