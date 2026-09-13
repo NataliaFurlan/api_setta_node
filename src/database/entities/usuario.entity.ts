@@ -15,7 +15,8 @@ export class Usuario {
   @PrimaryGeneratedColumn({ name: 'id_usuario', type: 'bigint' })
   idUsuario!: string;
   @Column({ length: 150 }) nome!: string;
-  @Column({ length: 180, unique: true }) email!: string;
+  @Column({ type: 'varchar', length: 180, unique: true, nullable: true })
+  email!: string | null;
   @Column({ name: 'senha_hash', select: false }) senhaHash!: string;
   @Column({ type: 'varchar', length: 30, nullable: true })
   telefone!: string | null;

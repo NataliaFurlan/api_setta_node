@@ -11,6 +11,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PasswordService } from './password.service';
 import { RolesGuard } from './roles.guard';
+import { RegistrationNotificationService } from './registration-notification.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Usuario, Treinador, Aluno]),
@@ -24,7 +25,13 @@ import { RolesGuard } from './roles.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, PasswordService, JwtStrategy, RolesGuard],
+  providers: [
+    AuthService,
+    PasswordService,
+    JwtStrategy,
+    RolesGuard,
+    RegistrationNotificationService,
+  ],
   exports: [JwtModule, PasswordService, RolesGuard],
 })
 export class AuthModule {}

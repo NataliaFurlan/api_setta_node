@@ -20,7 +20,7 @@ export class AuthController {
   @Post('cadastro/treinador')
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @ApiCreatedResponse({ type: CadastroTreinadorResponseDto })
-  @ApiConflictResponse({ description: 'E-mail já cadastrado' })
+  @ApiConflictResponse({ description: 'E-mail ou celular já cadastrado' })
   cadastrarTreinador(@Body() dto: CadastroTreinadorDto) {
     return this.auth.cadastrarTreinador(dto);
   }

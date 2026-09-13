@@ -7,6 +7,7 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 export class CadastroTreinadorDto {
@@ -16,13 +17,18 @@ export class CadastroTreinadorDto {
   @MaxLength(150)
   nome!: string;
 
-  @ApiProperty({ example: 'henrique@exemplo.com' })
+  @ApiPropertyOptional({ example: 'henrique@exemplo.com' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
+  @ValidateIf(
+    (dto: CadastroTreinadorDto, value: unknown) =>
+      (typeof value === 'string' && value.trim() !== '') ||
+      !dto.telefone?.trim(),
+  )
   @IsEmail()
   @MaxLength(180)
-  email!: string;
+  email?: string;
 
   @ApiProperty({ minLength: 8 })
   @IsString()
@@ -33,8 +39,14 @@ export class CadastroTreinadorDto {
   senha!: string;
 
   @ApiPropertyOptional({ example: '(11) 99999-9999' })
-  @IsOptional()
+  @ValidateIf(
+    (dto: CadastroTreinadorDto, value: unknown) =>
+      (typeof value === 'string' && value.trim() !== '') || !dto.email?.trim(),
+  )
   @IsString()
+  @Matches(/^(?=(?:\D*\d){10,15}\D*$)[+\d\s().-]+$/, {
+    message: 'Informe um telefone válido',
+  })
   @MaxLength(30)
   telefone?: string;
 

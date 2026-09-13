@@ -18,6 +18,7 @@ import { LoginDto } from './dto/login.dto';
 import { CadastroTreinadorDto } from './dto/cadastro-treinador.dto';
 import { CadastroTreinadorResponseDto } from './dto/cadastro-treinador-response.dto';
 import { PasswordService } from './password.service';
+import { RegistrationNotificationService } from './registration-notification.service';
 @Injectable()
 export class AuthService {
   constructor(
@@ -28,30 +29,36 @@ export class AuthService {
     private readonly passwords: PasswordService,
     private readonly jwt: JwtService,
     private readonly dataSource: DataSource,
+    private readonly notifications: RegistrationNotificationService,
   ) {}
 
   async cadastrarTreinador(
     dto: CadastroTreinadorDto,
   ): Promise<CadastroTreinadorResponseDto> {
-    const existente = await this.usuarios
-      .createQueryBuilder('usuario')
-      .where('LOWER(usuario.email) = :email', { email: dto.email })
-      .getExists();
-    if (existente) throw new ConflictException('E-mail já cadastrado');
+    const email = dto.email?.trim().toLowerCase() || null;
+    const telefone = dto.telefone?.replace(/\D/g, '') || null;
+    const query = this.usuarios.createQueryBuilder('usuario');
+    if (email) query.where('LOWER(usuario.email) = :email', { email });
+    if (telefone) {
+      if (email) query.orWhere('usuario.telefone = :telefone', { telefone });
+      else query.where('usuario.telefone = :telefone', { telefone });
+    }
+    if (await query.getExists())
+      throw new ConflictException('E-mail ou celular já cadastrado');
 
-    await this.dataSource.transaction(async (manager) => {
+    const cadastro = await this.dataSource.transaction(async (manager) => {
       const usuario = await manager.save(
         manager.create(Usuario, {
           nome: dto.nome.trim(),
-          email: dto.email,
+          email,
           senhaHash: await this.passwords.encode(dto.senha),
-          telefone: dto.telefone?.trim() || null,
+          telefone,
           tipoUsuario: TipoUsuario.TREINADOR,
           ativo: false,
           status: StatusTreinador.PENDENTE,
         }),
       );
-      await manager.save(
+      const treinador = await manager.save(
         manager.create(Treinador, {
           idUsuario: usuario.idUsuario,
           nomeProfissional: dto.nomeProfissional?.trim() || null,
@@ -60,6 +67,15 @@ export class AuthService {
           ativo: false,
         }),
       );
+      return { usuario, treinador };
+    });
+    await this.notifications.notifyNewTrainer({
+      idTreinador: cadastro.treinador.idTreinador,
+      nome: cadastro.usuario.nome,
+      email,
+      telefone,
+      nomeProfissional: dto.nomeProfissional?.trim() || null,
+      cref: dto.cref?.trim() || null,
     });
     return {
       status: 'PENDENTE_APROVACAO',
@@ -67,10 +83,13 @@ export class AuthService {
     };
   }
   async login(dto: LoginDto): Promise<LoginResponseDto> {
+    const login = dto.login.trim().toLowerCase();
+    const telefone = login.replace(/\D/g, '');
     const usuario = await this.usuarios
       .createQueryBuilder('usuario')
       .addSelect('usuario.senhaHash')
-      .where('LOWER(usuario.email) = :email', { email: dto.login })
+      .where('LOWER(usuario.email) = :login', { login })
+      .orWhere('usuario.telefone = :telefone', { telefone })
       .getOne();
     if (
       !usuario ||
@@ -84,7 +103,7 @@ export class AuthService {
       });
     const idPerfil = await this.findProfileId(usuario);
     const token = await this.jwt.signAsync({
-      sub: usuario.email,
+      sub: usuario.idUsuario,
       idUsuario: usuario.idUsuario,
       tipoUsuario: usuario.tipoUsuario,
       versaoSessao: usuario.versaoSessao,

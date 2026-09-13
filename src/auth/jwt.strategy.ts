@@ -30,7 +30,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (
       !usuario?.ativo ||
       usuario.versaoSessao !== payload.versaoSessao ||
-      usuario.email.toLowerCase() !== payload.sub.toLowerCase()
+      (usuario.idUsuario !== payload.sub &&
+        usuario.email?.toLowerCase() !== payload.sub.toLowerCase())
     )
       throw new UnauthorizedException();
     return payload;
