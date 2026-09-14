@@ -28,8 +28,13 @@ export class EmailEnvio {
   @Column({ default: 0 }) tentativas!: number;
   @Column({ name: 'ultimo_erro', type: 'text', nullable: true }) ultimoErro!:
     string | null;
-  @Column({ name: 'id_provedor', length: 255, nullable: true }) idProvedor!:
-    string | null;
+  @Column({
+    name: 'id_provedor',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  idProvedor!: string | null;
   @CreateDateColumn({ name: 'criado_em' }) criadoEm!: Date;
   @Column({ name: 'enviado_em', type: 'datetime', nullable: true })
   enviadoEm!: Date | null;
