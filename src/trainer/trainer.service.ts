@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'crypto';
-import { DataSource, MoreThan, Repository } from 'typeorm';
+import { DataSource, MoreThan, QueryFailedError, Repository } from 'typeorm';
 import { PasswordService } from '../auth/password.service';
 import { Aluno } from '../database/entities/aluno.entity';
 import {
@@ -101,13 +101,15 @@ export class TrainerService {
   async createInvite(idUsuario: string, dto: CreateStudentInviteDto) {
     const trainer = await this.trainers.findOneByOrFail({ idUsuario });
     const email = dto.email.trim().toLowerCase();
-    if (
-      await this.users
-        .createQueryBuilder('u')
-        .where('LOWER(u.email) = :email', { email })
-        .getExists()
-    )
-      throw new ConflictException('Este e-mail já possui uma conta.');
+    const telefone = dto.telefone?.replace(/\D/g, '') || null;
+    const existingUser = this.users
+      .createQueryBuilder('u')
+      .where('LOWER(u.email) = :email', { email });
+    if (telefone) existingUser.orWhere('u.telefone = :telefone', { telefone });
+    if (await existingUser.getExists())
+      throw new ConflictException(
+        'Este e-mail ou celular já possui uma conta.',
+      );
     const existing = await this.invites.findOneBy({
       idTreinador: trainer.idTreinador,
       email,
@@ -121,7 +123,7 @@ export class TrainerService {
         idTreinador: trainer.idTreinador,
         nome: dto.nome.trim(),
         email,
-        telefone: dto.telefone?.trim() || null,
+        telefone,
         tokenHash: this.hash(token),
         status: StatusConviteAluno.PENDENTE,
         expiraEm: new Date(Date.now() + 48 * 60 * 60 * 1000),
@@ -163,45 +165,71 @@ export class TrainerService {
   }
   async acceptInvite(token: string, dto: AcceptStudentInviteDto) {
     const tokenHash = this.hash(token);
-    await this.dataSource.transaction(async (manager) => {
-      const invite = await manager.findOneBy(ConviteAluno, {
-        tokenHash,
-        status: StatusConviteAluno.PENDENTE,
-        expiraEm: MoreThan(new Date()),
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        const invite = await manager.findOneBy(ConviteAluno, {
+          tokenHash,
+          status: StatusConviteAluno.PENDENTE,
+          expiraEm: MoreThan(new Date()),
+        });
+        if (!invite)
+          throw new BadRequestException('Convite inválido ou expirado.');
+        if (await manager.findOneBy(Usuario, { email: invite.email }))
+          throw new ConflictException('Este e-mail já possui uma conta.');
+        if (
+          invite.telefone &&
+          (await manager.findOneBy(Usuario, { telefone: invite.telefone }))
+        )
+          throw new ConflictException(
+            'Este celular já possui uma conta. Peça um novo convite sem esse número ou com outro celular.',
+          );
+        const user = await manager.save(
+          Usuario,
+          manager.create(Usuario, {
+            nome: invite.nome,
+            email: invite.email,
+            telefone: invite.telefone,
+            senhaHash: await this.passwords.encode(dto.senha),
+            tipoUsuario: TipoUsuario.ALUNO,
+            ativo: true,
+            versaoSessao: 0,
+          }),
+        );
+        await manager.save(
+          Aluno,
+          manager.create(Aluno, {
+            idUsuario: user.idUsuario,
+            idTreinador: invite.idTreinador,
+          }),
+        );
+        invite.status = StatusConviteAluno.ACEITO;
+        invite.aceitoEm = new Date();
+        await manager.save(invite);
       });
-      if (!invite)
-        throw new BadRequestException('Convite inválido ou expirado.');
-      if (await manager.findOneBy(Usuario, { email: invite.email }))
-        throw new ConflictException('Este e-mail já possui uma conta.');
-      const user = await manager.save(
-        Usuario,
-        manager.create(Usuario, {
-          nome: invite.nome,
-          email: invite.email,
-          telefone: invite.telefone,
-          senhaHash: await this.passwords.encode(dto.senha),
-          tipoUsuario: TipoUsuario.ALUNO,
-          ativo: true,
-          versaoSessao: 0,
-        }),
-      );
-      await manager.save(
-        Aluno,
-        manager.create(Aluno, {
-          idUsuario: user.idUsuario,
-          idTreinador: invite.idTreinador,
-        }),
-      );
-      invite.status = StatusConviteAluno.ACEITO;
-      invite.aceitoEm = new Date();
-      await manager.save(invite);
-    });
+    } catch (error) {
+      if (this.isDuplicateUser(error))
+        throw new ConflictException(
+          'Este e-mail ou celular já possui uma conta.',
+        );
+      throw error;
+    }
     return {
       message: 'Conta criada com sucesso. Você já pode entrar no Setta.',
     };
   }
   private hash(token: string) {
     return createHash('sha256').update(token).digest('hex');
+  }
+  private isDuplicateUser(error: unknown) {
+    if (!(error instanceof QueryFailedError)) return false;
+    const driverError = error.driverError as {
+      code?: string;
+      sqlMessage?: string;
+    };
+    return (
+      driverError.code === 'ER_DUP_ENTRY' &&
+      /uq_usuarios_(email|telefone)/.test(driverError.sqlMessage || '')
+    );
   }
 
   private sendStudentInvite(data: {
