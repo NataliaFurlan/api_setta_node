@@ -18,6 +18,7 @@ import { Treinador } from '../database/entities/treinador.entity';
 import { TipoUsuario, Usuario } from '../database/entities/usuario.entity';
 import { AcceptStudentInviteDto } from './dto/accept-student-invite.dto';
 import { CreateStudentInviteDto } from './dto/create-student-invite.dto';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class TrainerService {
@@ -31,6 +32,7 @@ export class TrainerService {
     private readonly passwords: PasswordService,
     private readonly config: ConfigService,
     private readonly dataSource: DataSource,
+    private readonly mail: MailService,
   ) {}
   async dashboard(idUsuario: string) {
     const trainer = await this.trainers.findOneByOrFail({ idUsuario });
@@ -98,16 +100,17 @@ export class TrainerService {
   }
   async createInvite(idUsuario: string, dto: CreateStudentInviteDto) {
     const trainer = await this.trainers.findOneByOrFail({ idUsuario });
+    const email = dto.email.trim().toLowerCase();
     if (
       await this.users
         .createQueryBuilder('u')
-        .where('LOWER(u.email) = :email', { email: dto.email })
+        .where('LOWER(u.email) = :email', { email })
         .getExists()
     )
       throw new ConflictException('Este e-mail já possui uma conta.');
     const existing = await this.invites.findOneBy({
       idTreinador: trainer.idTreinador,
-      email: dto.email,
+      email,
       status: StatusConviteAluno.PENDENTE,
     });
     if (existing) existing.status = StatusConviteAluno.REVOGADO;
@@ -117,7 +120,7 @@ export class TrainerService {
       this.invites.create({
         idTreinador: trainer.idTreinador,
         nome: dto.nome.trim(),
-        email: dto.email,
+        email,
         telefone: dto.telefone?.trim() || null,
         tokenHash: this.hash(token),
         status: StatusConviteAluno.PENDENTE,
@@ -127,12 +130,22 @@ export class TrainerService {
     const portal =
       this.config.get<string>('PORTAL_URL') ||
       'https://admin-setta.varten.com.br';
+    const link = `${portal}/convite/${token}`;
+    const delivery = await this.sendStudentInvite({
+      nome: invite.nome,
+      email: invite.email,
+      trainerName: trainer.nomeProfissional || 'seu treinador',
+      link,
+      expiration: invite.expiraEm,
+    });
     return {
       idConvite: invite.idConvite,
       nome: invite.nome,
       email: invite.email,
       expiraEm: invite.expiraEm,
-      link: `${portal}/convite/${token}`,
+      link,
+      emailStatus: delivery.status,
+      idEmail: delivery.idEmail,
     };
   }
   async getInvite(token: string) {
@@ -189,5 +202,33 @@ export class TrainerService {
   }
   private hash(token: string) {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private sendStudentInvite(data: {
+    nome: string;
+    email: string;
+    trainerName: string;
+    link: string;
+    expiration: Date;
+  }) {
+    const escape = (value: string) =>
+      value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+    return this.mail.send({
+      tipo: 'CONVITE_ALUNO',
+      to: data.email,
+      subject: `${data.trainerName} convidou você para o Setta`,
+      text: [
+        `Olá, ${data.nome}.`,
+        `${data.trainerName} convidou você para acompanhar seus treinos no Setta.`,
+        'Crie sua senha usando o link abaixo:',
+        data.link,
+        `O convite expira em ${data.expiration.toLocaleString('pt-BR')}.`,
+      ].join('\n\n'),
+      html: `<h2>Seu treino chegou ao Setta</h2><p>Olá, ${escape(data.nome)}.</p><p><strong>${escape(data.trainerName)}</strong> convidou você para acompanhar seus treinos no Setta.</p><p><a href="${escape(data.link)}" style="display:inline-block;padding:14px 22px;background:#101713;color:#d8ff57;text-decoration:none;border-radius:12px;font-weight:bold">Criar minha senha</a></p><p>Este convite é pessoal, pode ser usado uma única vez e expira em 48 horas.</p>`,
+    });
   }
 }

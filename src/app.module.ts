@@ -7,6 +7,7 @@ import { validateEnvironment } from './config/environment';
 import { HealthController } from './health/health.controller';
 import { AdminModule } from './admin/admin.module';
 import { TrainerModule } from './trainer/trainer.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { TrainerModule } from './trainer/trainer.module';
         ssl: config.get<string>('DB_SSL') === 'true' ? {} : undefined,
       }),
     }),
+    MailModule,
     AuthModule,
     AdminModule,
     TrainerModule,

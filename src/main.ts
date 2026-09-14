@@ -29,8 +29,7 @@ async function bootstrap() {
     origin: (
       origin: string | undefined,
       callback: (error: Error | null, allow?: boolean) => void,
-    ) =>
-      callback(null, isAllowedCorsOrigin(origin, origins)),
+    ) => callback(null, isAllowedCorsOrigin(origin, origins)),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   });
   const swagger = new DocumentBuilder()

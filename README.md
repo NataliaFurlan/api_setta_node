@@ -49,3 +49,39 @@ Para avisar a equipe sobre novos cadastros de treinador, configure as variáveis
 `SMTP_*` com a conta `equipe@varten.com.br`. Aplique também a migration
 `migrations/004_trainer_contact.sql`, que permite cadastro com e-mail ou celular
 e garante que celulares usados como login não se repitam.
+
+## E-mails transacionais
+
+O `MailModule` centraliza os envios SMTP e registra cada tentativa na tabela
+`email_envios`. Ele atende atualmente:
+
+- aviso interno de nova solicitação de treinador;
+- convite para o aluno criar a senha e ativar a conta.
+
+Antes de publicar esta versão, execute `migrations/005_email_deliveries.sql` nos
+bancos de teste e produção. Depois, configure no ambiente da API:
+
+```env
+SMTP_HOST=smtp.hostinger.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=equipe@varten.com.br
+SMTP_PASSWORD=senha-da-caixa-na-hostinger
+SMTP_FROM=Setta <equipe@varten.com.br>
+REGISTRATION_NOTIFICATION_EMAIL=equipe@varten.com.br
+PORTAL_URL=https://admin-setta.varten.com.br
+```
+
+`SMTP_PASSWORD` é a senha da caixa de e-mail, não a senha da conta Hostinger.
+Nunca versione esse valor. Se o SMTP falhar, o convite permanece criado e a
+resposta devolve `emailStatus: FALHA` junto do link, permitindo o envio manual.
+
+Para auditar os últimos envios:
+
+```sql
+SELECT id_email, tipo, destinatario, status, tentativas, ultimo_erro, criado_em,
+       enviado_em
+FROM email_envios
+ORDER BY id_email DESC
+LIMIT 50;
+```
